@@ -31,7 +31,7 @@ def check_image(image):
         return True
 
 
-def test(image_name, model_dir, device_id):
+def test(image_name, model_dir, model, device_id):
     model_test = AntiSpoofPredict(device_id)
     image_cropper = CropImage()
     image = cv2.imread(SAMPLE_IMAGE_PATH + image_name)
@@ -41,8 +41,14 @@ def test(image_name, model_dir, device_id):
     image_bbox = model_test.get_bbox(image)
     prediction = np.zeros((1, 3))
     test_speed = 0
+    # find all models in directory
+    total_models = os.listdir(model_dir)
+    # identify which model we want to use
+    if model != 'all':
+        if model in total_models:
+            total_models = [model]
     # sum the prediction from single model's result
-    for model_name in os.listdir(model_dir):
+    for model_name in total_models:
         h_input, w_input, model_type, scale = parse_model_name(model_name)
         param = {
             "org_img": image,
@@ -101,9 +107,14 @@ if __name__ == "__main__":
         default="./resources/anti_spoof_models",
         help="model_lib used to test")
     parser.add_argument(
+        "--model",
+        type=str,
+        default='2.7_80x80_MiniFASNetV2.pth',
+        help="certain model to use for prediction")
+    parser.add_argument(
         "--image_name",
         type=str,
         default="image_F1.jpg",
         help="image used to test")
     args = parser.parse_args()
-    test(args.image_name, args.model_dir, args.device_id)
+    test(args.image_name, args.model_dir, args.model, args.device_id)
