@@ -8,9 +8,13 @@
 import os
 import cv2
 import math
-import torch
 import numpy as np
 import torch.nn.functional as F
+
+import onnx
+import torch
+import onnx_tf.backend as backend
+import tensorflow as tf
 
 
 from src.model_lib.MiniFASNet import MiniFASNetV1, MiniFASNetV2,MiniFASNetV1SE,MiniFASNetV2SE
@@ -88,11 +92,61 @@ class AntiSpoofPredict(Detection):
         self.model.eval()
         with torch.no_grad():
             result = self.model.forward(img)
+            print(result)
             result = F.softmax(result).cpu().numpy()
         return result
 
+    # Followed instructions from https://github.com/sithu31296/PyTorch-ONNX-TFLite
+    def convert_pytorch_to_tflite(self, img, model_path):
+        test_transform = trans.Compose([
+            trans.ToTensor(),
+        ])
+        img = test_transform(img)
+        img = img.unsqueeze(0).to(self.device)
+        self._load_model(model_path)
+        self.model.eval()
 
+        torch.onnx.export(
+            model=self.model,
+            args=img,
+            f="converted_onnx_model.onnx",
+            verbose=False,
+            export_params=True,
+            do_constant_folding=False,
+            opset_version=12,
+            input_names=['inputs'],
+            output_names=['outputs']
+        )
+        model = onnx.load("converted_onnx_model.onnx")
+        tf_rep = backend.prepare(model, gen_tensor_dict=True)
+        tf_rep.export_graph("converted_tf_model")
+        converter = tf.lite.TFLiteConverter.from_saved_model("converted_tf_model")
+        tflite_model = converter.convert()
 
+        # Save the model
+        with open("converted_tflite_model.tflite", 'wb') as f:
+            f.write(tflite_model)
+
+        # Load the TFLite model and allocate tensors
+        interpreter = tf.lite.Interpreter(model_path="converted_tflite_model.tflite")
+        interpreter.allocate_tensors()
+
+        # Get input and output tensors
+        input_details = interpreter.get_input_details()
+        output_details = interpreter.get_output_details()
+
+        # Test the model on random input data
+        input_shape = input_details[0]['shape']
+        input_data = np.array(img, dtype=np.float32)
+        interpreter.set_tensor(input_details[0]['index'], input_data)
+
+        interpreter.invoke()
+
+        # get_tensor() returns a copy of the tensor data
+        # use tensor() in order to get a pointer to the tensor
+        output_data = interpreter.get_tensor(output_details[0]['index'])
+        print(output_data)
+        return
 
 
 
