@@ -587,3 +587,13 @@ def to_grayscale(img, num_output_channels=1):
         raise ValueError('num_output_channels should be either 1 or 3')
 
     return img
+
+def convert_jpg_to_bmp(image_path, image_name):
+    """Convert jpg image to bmp version of image and save it.
+
+        Args:
+            image_path : Path of image to be converted to bmp.
+
+            image_name : Name of image to be converted to bmp.
+    """
+    Image.open(image_path + image_name + ".png").save(image_path + image_name + ".bmp")
